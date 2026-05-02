@@ -2,7 +2,8 @@
 # Local (this folder as cwd): python -m uvicorn app:app --host 0.0.0.0 --port 8000
 # From repo root: python -m uvicorn guardian_misinformation_module.app:app --host 0.0.0.0 --port 8000
 # Render: Root = this folder; Start: uvicorn app:app --host 0.0.0.0 --port $PORT
-# Set USE_FALLBACK_MODEL=1 on Render if the bundled distilbert weights are not deployed.
+# Render: set MISINFO_HF_REPO=your-org/misinformation after uploading weights; use HF_TOKEN if the repo is private.
+# Or USE_FALLBACK_MODEL=1 if you skip custom weights.
 
 from __future__ import annotations
 

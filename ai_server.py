@@ -16,6 +16,7 @@ import json
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -432,6 +433,31 @@ class AIChatbot:
                 )
         except Exception:
             pass
+
+    def _load_from_huggingface(self, repo_id: str, subfolder: Optional[str] = None) -> bool:
+        """Load causal LM from Hugging Face Hub (set MISINFO_HF_REPO, optional MISINFO_HF_SUBFOLDER)."""
+        try:
+            extra = f" (subfolder={subfolder})" if subfolder else ""
+            logger.info(f"Loading AI model from Hugging Face Hub: {repo_id}{extra}")
+            kwargs = {}
+            if subfolder:
+                kwargs["subfolder"] = subfolder
+            self.tokenizer = AutoTokenizer.from_pretrained(repo_id, **kwargs)
+            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+            self.model = AutoModelForCausalLM.from_pretrained(
+                repo_id,
+                torch_dtype=dtype,
+                **kwargs,
+            )
+            self.model.eval()
+            if self.tokenizer.pad_token_id is None and self.tokenizer.eos_token_id is not None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model_type = "trained"
+            logger.info("✅ AI model loaded from Hugging Face Hub successfully!")
+            return True
+        except Exception as e:
+            logger.warning(f"Hugging Face Hub model load failed: {e}")
+            return False
     
     def load_model(self):
         """Load your trained AI model"""
@@ -442,6 +468,13 @@ class AIChatbot:
             logger.info("Using fallback model (forced by environment variable)")
             self._load_fallback_model()
             return
+
+        hf_repo = (os.environ.get("MISINFO_HF_REPO") or "").strip()
+        hf_sub = (os.environ.get("MISINFO_HF_SUBFOLDER") or "").strip() or None
+        if hf_repo:
+            if self._load_from_huggingface(hf_repo, hf_sub):
+                return
+            logger.warning("Hub load failed; trying local model path next.")
 
         # Try to find the model - check for checkpoint directories
         model_to_load = None
@@ -892,7 +925,8 @@ except Exception as e:
     logger.error(f"❌ Failed to initialize AI: {e}")
     logger.error(f"   Model path attempted: {SCRIPT_DIR / 'models' / 'distilbert-misinfo'}")
     logger.error(f"   Server will still run but AI features will be unavailable.")
-    logger.error(f"   To use fallback model, set environment variable: USE_FALLBACK_MODEL=1")
+    logger.error("   To load from Hugging Face: set MISINFO_HF_REPO=org/model (optional MISINFO_HF_SUBFOLDER=checkpoint-N).")
+    logger.error("   To use local fallback only: USE_FALLBACK_MODEL=1")
 
 def generate_with_timeout(chatbot, message, risk_level=None, susceptibility_score=None, timeout_seconds=20):
     """Generate AI response with timeout using threading"""
